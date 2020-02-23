@@ -1,0 +1,100 @@
+---
+title: "Hw3"
+author: "Calvin Wong"
+date: "2/19/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+library(fpp2)
+library(forecast)
+library(seasonal)
+```
+
+2. The plastics data set consists of the monthly sales (in thousands) of product A for a plastics manufacturer for five years.
+
+```{r}
+plastics
+```
+
+a) Plot the time series of sales of product A. Can you identify seasonal fluctuations and/or a trend-cycle?
+
+There is a seasonal fluctuations within a frequency of 1 year with an increasing trend.
+
+```{r}
+plot(plastics)
+```
+
+b) Use a classical multiplicative decomposition to calculate the trend-cycle and seasonal indices.
+
+```{r}
+plastics %>% decompose(type="multiplicative") %>% 
+  autoplot() + xlab("Year") +
+  ggtitle("Classical multiplicative decomposition of plastics")
+```
+
+c) Do the results support the graphical interpretation from part a?
+
+Yes, it does. Seasonality and trend is represented from part a. However, trend descend towards year 5 is better represented within this graph.
+
+d) Compute and plot the seasonally adjusted data.
+
+```{r}
+mult_decomp <- plastics %>%
+  decompose(type="multiplicative")
+
+autoplot(plastics, series="Data") +
+  autolayer(seasadj(mult_decomp), series="Seasonally Adjusted") +
+  ggtitle("Plastics sales") + 
+  ylab("Sales") +
+  xlab("Year")
+```
+
+e) Change one observation to be an outlier (e.g., add 500 to one observation), and recompute the seasonally adjusted data. What is the effect of the outlier?
+
+The outlier has some effect, however, it is minimal in most cases. The largest change is a spike in the 4th quadrant within the data graph. This spike is reciprocated in the trend and remainder graph as well.
+
+```{r}
+plastics1 <- plastics
+plastics1[17] <- plastics1[17]+500
+
+mult_decomp2 <- plastics1 %>%
+  decompose(type="multiplicative") 
+
+plastics1 %>%
+decompose(type="multiplicative") %>% 
+autoplot() + 
+ggtitle("Revised plastics to include an outlier")
+```
+
+f) Does it make any difference if the outlier is near the end rather than in the middle of the time series?
+
+Yes, the outlier changes visualization towards the end as expected. However, in this case, only the data graph is largely impacted.
+
+```{r}
+plastics2 <- plastics
+plastics2[55] <- plastics2[55]+500
+
+mult_decomp2 <- plastics2 %>%
+  decompose(type="multiplicative") 
+
+plastics2 %>%
+decompose(type="multiplicative") %>% 
+autoplot() + 
+ggtitle("Revised plastics to include an outlier")
+```
+
+3. Recall your retail time series data (from Exercise 3 in Section 2.10). Decompose the series using X11. Does it reveal any outliers, or unusual features that you had not noticed previously?
+
+Yes, there are outliers based on the remainder graph scattered throughout time. What is more surprising is the seasonality spikes becoming smaller over time. I also did not realize trend being affected 2006 until 2011 where it started to recover. 
+
+```{r}
+retaildata <- readxl::read_excel("retail.xlsx", skip=1)
+myts <- ts(retaildata[,"A3349909T"], frequency=12, start=c(1982,4))
+myts %>% seas(x11="") -> myts_x11
+autoplot(myts_x11) +
+  ggtitle("X11 decomposition of retail data")
+```
+

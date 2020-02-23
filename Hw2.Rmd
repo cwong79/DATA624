@@ -1,0 +1,96 @@
+---
+title: "Hw2"
+author: "Calvin Wong"
+date: "2/16/2020"
+output: html_document
+---
+
+```{r}
+library(forecast)
+library(fpp2)
+```
+
+1) For the following series, find an appropriate Box-Cox transformation in order to stabilise the variance.
+usnetelec
+usgdp
+mcopper
+enplanements
+
+```{r}
+(lambda1 <- BoxCox.lambda(usnetelec))
+autoplot(BoxCox(usnetelec,lambda1))
+
+(lambda2 <- BoxCox.lambda(usgdp))
+autoplot(BoxCox(usgdp,lambda2))
+
+(lambda3 <- BoxCox.lambda(mcopper))
+autoplot(BoxCox(mcopper,lambda3))
+
+(lambda4 <- BoxCox.lambda(enplanements))
+autoplot(BoxCox(enplanements,lambda4))
+```
+
+2) Why is a Box-Cox transformation unhelpful for the cangas data?
+
+The Box-Cox transformation is used to transform data into a normal distribution. However, in this instance, Box-Cox is unable to ‘smooth’ out excess seasonal variation, because of there isn't a normal distribution. Therefore, the data looks exactly the same pre-transformation as post-transformation.
+
+```{r}
+(lambda5 <- BoxCox.lambda(cangas))
+autoplot(BoxCox(cangas,lambda5))
+autoplot(cangas) 
+```
+
+3) What Box-Cox transformation would you select for your retail data (from Exercise 3 in Section 2.10)?
+
+The BoxCox.lambda() function choosed a value of 0.452796 lambda.
+
+```{r}
+retaildata <- readxl::read_excel("retail.xlsx", skip=1)
+myts <- ts(retaildata[,"A3349909T"],
+  frequency=12, start=c(1982,4))
+(lambda6 <- BoxCox.lambda(myts))
+autoplot(BoxCox(myts,lambda6))
+```
+
+8) For your retail time series (from Exercise 3 in Section 2.10):
+
+a) Split the data into two parts using
+
+```{r}
+myts.train <- window(myts, end=c(2010,12))
+myts.test <- window(myts, start=2011)
+```
+
+b) Check that your data have been split appropriately by producing the following plot.
+
+```{r}
+autoplot(myts) +
+  autolayer(myts.train, series="Training") +
+  autolayer(myts.test, series="Test")
+```
+
+c) Calculate forecasts using snaive applied to myts.train.
+
+```{r}
+fc <- snaive(myts.train)
+```
+
+d) Compare the accuracy of your forecasts against the actual values stored in myts.test.
+
+```{r}
+accuracy(fc,myts.test)
+```
+
+e) Check the residuals.
+
+```{r}
+checkresiduals(fc)
+```
+
+Do the residuals appear to be uncorrelated and normally distributed?
+
+The residuals are centered above zero and follow a normal distribution. There is a right-tail and approximately 30% of the residuals lie outside the boundary. ACF shows the values for the initial 12 lags has a decrease then runs approximately parallel, which indicates that the residuals are uncorrelated.
+
+f) How sensitive are the accuracy measures to the training/test split?
+
+The errors for the test and train set are significant. The test set has larger errors that the training set for the mean error, root mean square error, mean absolute error, mean absolute scaled error with only the auto correlation function showing training set slightly above the test set. It seems that the accuracy measures are not sensitive to the split.
