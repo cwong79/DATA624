@@ -1,0 +1,367 @@
+---
+title: "Hw6"
+author: "Calvin Wong"
+date: "4/8/2020"
+output: html_document
+---
+
+```{r}
+library(fpp2)
+library(mlbench) 
+library(corrplot)
+library(ggplot2)
+require(gridExtra)
+library(car)
+library(caret)
+library(tidyverse)
+library(DT)
+library(urca)
+```
+
+8.1
+Figure 8.31 shows the ACFs for 36 random numbers, 360 random numbers and 1,000 random numbers.
+a) Explain the differences among these figures. Do they all indicate that the data are white noise?
+
+For a white noise series, we expect 95% of the spikes in the ACF to lie within , where T is the length of the time series. That is why, as T gets larger, the range between the dashed lines around the mean of zero in the diagrams is getting narrower. The diagrams do have some spikes touching or going slightly beyond the 95% interval border lines and, counted together, none of them make up more than 5% of T values. Therefore all 3 series can be regarded as white noise.
+
+
+b) Why are the critical values at different distances from the mean of zero? Why are the autocorrelations different in each figure when they each refer to white noise?
+
+The reason why the critical values are at different distances from the mean of zero is because there is a random autocorrelation with some positive and negative values around the zero line.
+
+Given that the 3 series are composed of randomly chosen numbers, we expect the values and subsequently the autocorrelation values (in magnitude and direction) to be also random as well. Therefore, we expect the graphics to look different from each other and to show random and small in magnitude fluctuations which is the very definition of white noise.
+
+8.2
+A classic example of a non-stationary series is the daily closing IBM stock price series (data set ibmclose). Use R to plot the daily closing prices for IBM stock and the ACF and PACF. Explain how each plot shows that the series is non-stationary and should be differenced.
+
+```{r}
+autoplot(ibmclose)
+```
+
+Both ACF and PACF graphs show very significant seasonal (daily) autocorrelation, which certainly disqualifies the series being similar to white noise. Also, the graph for the series itself shows cycles of lengthy periods of generally upward and then downward trends.
+
+```{r}
+ggAcf(ibmclose)
+```
+
+```{r}
+ggPacf(ibmclose)
+```
+
+
+8.3
+For the following series, find an appropriate Box-Cox transformation and order of differencing in order to obtain stationary data.
+
+a) usnetelec
+
+```{r}
+autoplot(usnetelec)
+```
+
+Even though the suggested lambda is 0.5167714, the transformation made no apparent difference to reduce variation in the data. This may not be surprising as there is no evident trend of increasing or decreasing variation in the time series data. Therefore, in this particular case, no Box-Cox transformation is required.
+
+Also, given that there is no observable seasonality here, there is no need to perform Seasonal Differencing. Therefore it appears to be appropriate to perform ordinary differencing (First Differencing, meaniing at lag 1). The below graph for the differencing and the Box.test confirm that the differenced data can be regarded as white noise.
+
+```{r}
+ggtsdisplay(usnetelec)
+```
+
+```{r}
+usnetelec %>% 
+  diff() %>%
+  ggtsdisplay()
+```
+
+b) usgdp
+
+```{r}
+autoplot(usgdp)
+```
+
+In this example, the Box-Cox transformation, with lambda 0.366352, is helpful as it removed the curvature in the original data and therefore makes it possible for a straight-line linear regression model.
+
+Again, as in (a) above, linearly trending data can be applied to First Defferencing to obtain stationary, “white noise” representation.
+
+```{r}
+ggtsdisplay(usgdp)
+```
+
+```{r}
+lambda <- BoxCox.lambda(usgdp)
+autoplot(BoxCox(usgdp,lambda=lambda))
+```
+
+```{r}
+usgdp %>% 
+  BoxCox(lambda=lambda) %>%
+  diff() %>%
+  ggtsdisplay()
+```
+
+c) mcopper
+
+```{r}
+autoplot(mcopper)
+```
+
+For this data, the Box-Cox transformation, in my opinion, did not make any improvements.
+
+The data appears to have monthly seasonality and therefore it’s best to use Lag-1 differencing.
+
+```{r}
+ggtsdisplay(mcopper)
+```
+
+```{r}
+lambda <- BoxCox.lambda(mcopper)
+autoplot(BoxCox(mcopper,lambda=lambda))
+```
+
+```{r}
+mcopper %>% 
+  BoxCox(lambda=lambda) %>%
+  diff() %>%
+  ggtsdisplay()
+```
+
+d) enplanements
+
+```{r}
+autoplot(enplanements)
+```
+
+The Box-Cox transformation makes slight improvement in stabilizing the high and lows of the seasonal patterns in the data and therefore, in my opinion, it has some variance reducing effect on the data.
+
+Based on the Lag graphs for the transformed data, there appears to be yearly (Lag 12), as well as monthly seasonality (Lag 1). Even though ndiffs recommends one order differencing, I think performing Second-order differencing improves the data to look more like white noise.
+
+```{r}
+ggtsdisplay(enplanements)
+```
+
+```{r}
+ggseasonplot(enplanements)
+```
+
+```{r}
+lambda <- BoxCox.lambda(enplanements)
+autoplot(BoxCox(enplanements,lambda=lambda))
+```
+
+```{r}
+enplanements %>% 
+  BoxCox(lambda=lambda) %>%
+  diff(lag=12) %>% 
+  diff() %>% 
+  ggtsdisplay()
+```
+
+e) visitors
+
+```{r}
+autoplot(visitors)
+```
+
+The Box-Cox transformation makes a good improvement in reducing variability of the time series progression.
+
+Again, similar to (d) above, the Lag graphs suggest yearly (Lag 12), as well as monthly seasonality (Lag 1). Even though ndiffs recommends one order differencing, I think performing Second-order differencing improves the data, albeit slightly, to look more like white noise.
+
+```{r}
+ggtsdisplay(visitors)
+```
+
+```{r}
+ggseasonplot(visitors)
+```
+
+```{r}
+lambda <- BoxCox.lambda(visitors)
+autoplot(BoxCox(visitors,lambda=lambda))
+```
+
+```{r}
+visitors %>% 
+  BoxCox(lambda=lambda) %>%
+  diff(lag=12) %>% 
+  diff() %>%
+  ggtsdisplay()
+```
+
+
+8.5.
+For your retail data (from Exercise 3 in Section 2.10), find the appropriate order of differencing (after transformation if necessary) to obtain stationary data.
+
+```{r}
+retaildata <- readxl::read_excel("retail.xlsx", skip=1)
+myts <- ts(retaildata[,"A3349909T"], frequency=12, start=c(1982,4))
+autoplot(myts)
+```
+
+```{r}
+ggtsdisplay(myts)
+```
+
+```{r}
+ggseasonplot(myts)
+```
+
+```{r}
+lambda <- BoxCox.lambda(myts)
+autoplot(BoxCox(myts,lambda=lambda))
+```
+
+```{r}
+myts %>% 
+  BoxCox(lambda=lambda) %>%
+  diff(lag=12) %>%
+  diff() %>% 
+  ggtsdisplay()
+```
+
+8.6
+Use R to simulate and plot some data from simple ARIMA models.
+a) Use the following R code to generate data from an AR(1) model with  
+
+```{r}
+ar1 <- function(phi){
+  y <- ts(numeric(100))
+  e <- rnorm(100)
+  for(i in 2:100)
+    y[i] <- phi*y[i-1] + e[i]
+  return(y)
+}
+autoplot(ar1(0.6))
+```
+
+b) Produce a time plot for the series. How does the plot change as you change  
+
+```{r}
+autoplot(ar1(0.1))
+```
+
+```{r}
+autoplot(ar1(0.5))
+```
+
+```{r}
+autoplot(ar1(0.9))
+```
+
+c) Write your own code to generate data from an MA(1) model with  
+
+```{r}
+ma1 <- function(theta){
+  y <- ts(numeric(100))
+  e <- rnorm(100)
+  for(i in 2:100)
+    y[i] <- theta*e[i-1] + e[i]
+  return(y)
+}
+autoplot(ma1(0.6))
+```
+
+d) Produce a time plot for the series. How does the plot change as you change  
+
+```{r}
+autoplot(ma1(0.1))
+```
+
+```{r}
+autoplot(ma1(0.5))
+```
+
+```{r}
+autoplot(ma1(0.9))
+```
+
+e) Generate data from an ARMA(1,1) model with  
+
+```{r}
+arma1_1 <- function(phi, theta, n=100){
+  y <- ts(numeric(100))
+  e <- rnorm(100)
+  for(i in 2:100)
+    y[i] <- phi*y[i-1] + theta*e[i-1] + e[i]
+  return(y)
+}
+autoplot(arma1_1(0.6, 0.6))
+```
+
+f) Generate data from an AR(2) model with  
+
+```{r}
+ar2 <- function(phi1, phi2, n=100){
+  y <- ts(numeric(100))
+  e <- rnorm(100)
+  for(i in 3:100)
+    y[i] <- phi1*y[i-1] + phi2*y[i-2] + e[i]
+  return(y)
+}
+autoplot(ar2(-0.8,0.3))
+```
+
+g) Graph the latter two series and compare them.
+
+
+
+8.7
+Consider wmurders, the number of women murdered each year (per 100,000 standard population) in the United States.
+a) By studying appropriate graphs of the series in R, find an appropriate ARIMA model for these data.
+
+```{r}
+autoplot(wmurders)
+```
+
+```{r}
+ggtsdisplay(wmurders)
+```
+
+```{r}
+wmurders %>%
+  diff() %>% 
+  ggtsdisplay()
+```
+
+```{r}
+print(paste("AR(2) AICc =",Arima(wmurders, order=c(2,1,0), method="ML")$aicc))
+```
+
+```{r}
+print(paste("MA(2) AICc =",Arima(wmurders, order=c(0,1,2), method="ML")$aicc))
+```
+
+b) Should you include a constant in the model? Explain.
+
+No, we shouldn’t because as mentioned above, there doesn’t appear to be any drift in the series.
+
+c) Write this model in terms of the backshift operator.
+
+
+
+d) Fit the model using R and examine the residuals. Is the model satisfactory?
+
+```{r}
+arima_012 <- Arima(wmurders, order=c(0,1,2))
+checkresiduals(arima_012)
+```
+
+e) Forecast three times ahead. Check your forecasts by hand to make sure that you know how they have been calculated.
+
+```{r}
+arima_fc <- forecast(arima_012, h=3)
+arima_fc
+```
+
+f) Create a plot of the series with forecasts and prediction intervals for the next three periods shown.
+
+```{r}
+autoplot(arima_fc)
+```
+
+g) Does auto.arima() give the same model you have chosen? If not, which model do you think is better?
+
+```{r}
+autofit_arima <- auto.arima(wmurders, d=1, stepwise = FALSE)
+forecast(autofit_arima, h=3) %>%
+  autoplot()
+```
+

@@ -1,0 +1,303 @@
+---
+title: "Hw8"
+author: "Calvin Wong"
+date: "4/19/2020"
+output: html_document
+---
+
+7.2. Friedman (1991) introduced several benchmark data sets create by simulation. One of these simulations used the following nonlinear equation to  create data:  y = 10 sin(πx1x2) + 20(x3 − 0.5)2 + 10x4 + 5x5 + N(0, σ2)  where the x values are random variables uniformly distributed between [0, 1]  (there are also 5 other non-informative variables also created in the simulation). The package mlbench contains a function called mlbench.friedman1 that simulates these data:  
+
+```{r}
+library(mlbench)
+library(caret)
+library(dplyr)
+library(knitr)
+library(AppliedPredictiveModeling)
+library(RANN)
+
+set.seed(17)
+trainingData <- mlbench.friedman1(200, sd = 1)
+## We convert the 'x' data from a matrix to a data frame
+## One reason is that this will five the columns names.
+trainingData$x <- data.frame(trainingData$x)
+## Look at the data using
+featurePlot(trainingData$x, trainingData$y)
+```
+
+```{r}
+testData <- mlbench.friedman1(5000, sd = 1)
+testData$x <- data.frame(testData$x)
+```
+
+###KNN
+
+```{r}
+knnModel <- train(x = trainingData$x, 
+                  y = trainingData$y,
+                  method = "knn",
+                  preProcess = c("center", "scale"),
+                  tuneLength = 10)
+knnModel
+```
+
+```{r}
+knnPred <- predict(knnModel, newdata = testData$x)
+## The function 'postResample' can be used to get the test set
+## performance values
+postResample(pred = knnPred, obs = testData$y)
+```
+
+###MARS
+
+```{r}
+MARS_grid <- expand.grid(.degree = 1:2, .nprune = 2:15)
+MARS_model <- train(x = trainingData$x, 
+                  y = trainingData$y,
+                  method = "earth",
+                  tuneGrid = MARS_grid,
+                  preProcess = c("center", "scale"),
+                  tuneLength = 10)
+MARS_model
+```
+
+The optimal MARS model is as follows ~ 2 Degree and 14 nprune, for the following RMSE 1.265418 
+
+```{r}
+MARS_predictions <- predict(MARS_model, newdata = testData$x)
+postResample(pred = MARS_predictions, obs = testData$y)
+```
+
+Variable of importance
+
+```{r}
+varImp(MARS_model)
+```
+
+###SVM Model
+
+```{r}
+
+SVM_model <- train(x = trainingData$x,
+                   y = trainingData$y,
+                   method = "svmRadial",
+                   preProcess = c("center", "scale"),
+                   tuneLength = 10,
+                   trControl = trainControl(method = "cv"))
+SVM_model
+```
+The final values used for the model were sigma = 0.06955692 and C = 8.
+
+```{r}
+SVM_predictions <- predict(SVM_model, newdata = testData$x)
+postResample(pred = SVM_predictions, obs = testData$y)
+```
+
+Variable of importance
+
+```{r}
+varImp(SVM_model)
+```
+
+###Neural Network Model
+
+```{r}
+nnet_grid <- expand.grid(.decay = c(0, 0.01, .1), .size = c(1:10), .bag = FALSE)
+nnet_maxnwts <- 5 * (ncol(trainingData$x) + 1) + 5 + 1
+nnet_model <- train(x = trainingData$x,
+                    y = trainingData$y,
+                    method = "avNNet",
+                    preProcess = c("center", "scale"),
+                    tuneGrid = nnet_grid,
+                    trControl = trainControl(method = "cv"),
+                    linout = TRUE,
+                    trace = FALSE,
+                    MaxNWts = nnet_maxnwts,
+                    maxit = 500)
+nnet_model
+```
+
+The final values used for the model were size = 4, decay = 0.01 and bag = FALSE.
+
+```{r}
+nnet_predictions <- predict(nnet_model, newdata = testData$x)
+postResample(pred = nnet_predictions, obs = testData$y)
+```
+
+Variable of importance
+
+```{r}
+varImp(nnet_model)
+```
+
+Summary
+
+```{r}
+results <- data.frame(t(postResample(pred = knnPred, obs = testData$y))) %>% 
+  mutate("Model" = "KNN")
+
+results <- data.frame(t(postResample(pred = MARS_predictions, obs = testData$y))) %>%
+  mutate("Model"= "MARS") %>%
+  bind_rows(results)
+
+results <- data.frame(t(postResample(pred = SVM_predictions, obs = testData$y))) %>%
+  mutate("Model"= "SVM") %>%
+  bind_rows(results)
+
+results <- data.frame(t(postResample(pred = nnet_predictions, obs = testData$y))) %>%
+  mutate("Model"= "Neural Network") %>%
+  bind_rows(results)
+
+results %>%
+  select(Model, RMSE, Rsquared, MAE) %>%
+  arrange(RMSE) %>%
+  kable()
+```
+
+Which models appear to give the best performance? Does MARS select the informative predictors (those named X1–X5)? 
+
+The MARS model performed best with an RMSE of 1.142626 and it does select informative predictors from X1 to X5.
+
+7.5. Exercise 6.3 describes data for a chemical manufacturing process. Use  the same data imputation, data splitting, and pre-processing steps as before  and train several nonlinear regression models. 
+
+```{r}
+data(ChemicalManufacturingProcess)
+
+# Make this reproducible
+set.seed(42)
+
+knn_model <- preProcess(ChemicalManufacturingProcess, "knnImpute")
+df <- predict(knn_model, ChemicalManufacturingProcess)
+
+df <- df %>%
+  select_at(vars(-one_of(nearZeroVar(., names = TRUE))))
+
+in_train <- createDataPartition(df$Yield, times = 1, p = 0.8, list = FALSE)
+train_df <- df[in_train, ]
+test_df <- df[-in_train, ]
+
+pls_model <- train(
+  Yield ~ ., data = train_df, method = "pls",
+  center = TRUE,
+  scale = TRUE,
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 25
+)
+
+pls_model
+```
+
+(a) Which nonlinear regression model gives the optimal resampling and test  set performance?  
+
+###KNN
+
+```{r}
+knn_model <- train(
+  Yield ~ ., data = train_df, method = "knn",
+  center = TRUE,
+  scale = TRUE,
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 25
+)
+knn_model
+
+knn_predictions <- predict(knn_model, test_df)
+
+results <- data.frame(t(postResample(pred = knn_predictions, obs = test_df$Yield))) %>%
+  mutate("Model"= "KNN") %>% rbind(results)
+```
+
+###MARS
+
+```{r}
+MARS_grid <- expand.grid(.degree = 1:2, .nprune = 2:15)
+
+MARS_model <- train(
+  Yield ~ ., data = train_df, method = "earth",
+  tuneGrid = MARS_grid,
+  # If the following lines are uncommented, it throws an error
+  #center = TRUE,
+  #scale = TRUE,
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 25
+)
+MARS_model
+
+MARS_predictions <- predict(MARS_model, test_df)
+
+results <- data.frame(t(postResample(pred = MARS_predictions, obs = test_df$Yield))) %>%
+  mutate("Model"= "MARS") %>% rbind(results)
+```
+
+###SVM
+
+```{r}
+SVM_model <- train(
+  Yield ~ ., data = train_df, method = "svmRadial",
+  center = TRUE,
+  scale = TRUE,
+  trControl = trainControl(method = "cv"),
+  tuneLength = 25
+)
+SVM_model
+
+SVM_predictions <- predict(SVM_model, test_df)
+
+results <- data.frame(t(postResample(pred = SVM_predictions, obs = test_df$Yield))) %>%
+  mutate("Model"= "SVM") %>% rbind(results)
+```
+
+###NNM
+
+```{r}
+nnet_grid <- expand.grid(.decay = c(0, 0.01, .1), .size = c(1:10), .bag = FALSE)
+nnet_maxnwts <- 5 * ncol(train_df) + 5 + 1
+nnet_model <- train(
+  Yield ~ ., data = train_df, method = "avNNet",
+  center = TRUE,
+  scale = TRUE,
+  tuneGrid = nnet_grid,
+  trControl = trainControl(method = "cv"),
+  linout = TRUE,
+  trace = FALSE,
+  MaxNWts = nnet_maxnwts,
+  maxit = 500
+)
+
+nnet_model
+
+nnet_predictions <- predict(nnet_model, test_df)
+
+results <- data.frame(t(postResample(pred = nnet_predictions, obs = test_df$Yield))) %>%
+  mutate("Model"= "Neural Network") %>% rbind(results)
+```
+
+###Summary
+
+```{r}
+results %>%
+  select(Model, RMSE, Rsquared, MAE) %>%
+  arrange(RMSE) %>%
+  kable() 
+```
+
+(b) Which predictors are most important in the optimal nonlinear regression model? Do either the biological or process variables dominate the  list? How do the top ten important predictors compare to the top ten  predictors from the optimal linear model?  
+
+Neither the biological or process variables dominate the list. As far as the split is concerned, neither variables seem to dominate the list, although for the SVM model there is an additional process model.
+
+```{r}
+varImp(SVM_model, 10)
+```
+
+```{r}
+varImp(pls_model, 10)
+```
+
+(c) Explore the relationships between the top predictors and the response for the predictors that are unique to the optimal nonlinear regression model. Do these plots reveal intuition about the biological or process predictors and their relationship with yield? 
+
+This indicates a positive relationship between the BiologicalMaterial08 and yeild, the highest yeild is the furthest to the right on the graph.
+
+```{r}
+ggplot(train_df, aes(BiologicalMaterial08, Yield)) +
+  geom_point()
+```
+

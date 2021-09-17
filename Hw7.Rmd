@@ -1,0 +1,223 @@
+---
+title: "Hw7"
+author: "Calvin Wong"
+date: "4/17/2020"
+output: html_document
+---
+
+6.2. Developing a model to predict permeability (see Sect. 1.4) could save significant resources for a pharmaceutical company, while at the same time more  rapidly identifying molecules that have a sufficient permeability to become a  drug:
+
+(a) Start R and use these commands to load the data:  > library(AppliedPredictiveModeling)  > data(permeability)  The matrix fingerprints contains the 1,107 binary molecular predictors for the 165 compounds, while permeability contains permeability  response.  
+
+```{r}
+library(caret)
+library(AppliedPredictiveModeling)
+
+data(permeability)
+str(permeability)
+```
+
+(b) The fingerprint predictors indicate the presence or absence of substructures of a molecule and are often sparse meaning that relatively few of the  molecules contain each substructure. Filter out the predictors that have  low frequencies using the nearZeroVar function from the caret package.  How many predictors are left for modeling?  
+
+388 Predictors are left for modeling
+
+```{r}
+lowfreq <- nearZeroVar(fingerprints)
+X <- fingerprints[,-lowfreq]
+str(X)
+#388
+```
+
+(c) Split the data into a training and a test set, pre-process the data, and  tune a PLS model. How many latent variables are optimal and what is the corresponding resampled estimate of R2?  
+
+CV found the optimal to be 12, with the maximum R2 being 0.530788.
+
+```{r}
+set.seed(17)
+trainRow <- createDataPartition(permeability, p=0.8, list=FALSE)
+X.train <- X[trainRow, ]
+y.train <- permeability[trainRow, ]
+X.test <- X[-trainRow, ]
+y.test <- permeability[-trainRow, ]
+```
+
+```{r}
+set.seed(17)
+plsFit <- train(x=X.train,
+                y=y.train, 
+                method='pls',
+                metric='Rsquared',
+                tuneLength=20,
+                trControl=trainControl(method='cv'),
+                preProcess=c('center', 'scale')
+                )
+
+plsResult <- plsFit$results
+plsFit
+```
+
+(d) Predict the response for the test set. What is the test set estimate of R2?  
+
+The R2 test set estimate is 0.2986943.
+
+```{r}
+plsPred <- predict(plsFit, newdata=X.test)
+postResample(pred=plsPred, obs=y.test)
+```
+
+(e) Try building other models discussed in this chapter. Do any have betteryes
+predictive performance?  
+
+We will attempt 3 different models, the model with the maximum R2 is the lasso model, with an R2 of 0.5459518 .
+
+```{r}
+set.seed(17)
+ridgeFit <- train(x=X.train,
+                  y=y.train,
+                  method='ridge',
+                  metric='Rsquared',
+                  tuneGrid=data.frame(.lambda = seq(0, 1, by=0.1)),
+                  trControl=trainControl(method='cv'),
+                  preProcess=c('center','scale')
+                  )
+ridgeFit
+```
+
+```{r}
+plot(ridgeFit)
+```
+
+```{r}
+set.seed(17)
+lassoFit <- train(x=X.train,
+                  y=y.train,
+                  method='lasso',
+                  metric='Rsquared',
+                  tuneGrid=data.frame(.fraction = seq(0, 0.5, by=0.05)),
+                  trControl=trainControl(method='cv'),
+                  preProcess=c('center','scale')
+                  )
+lassoFit
+```
+
+```{r}
+plot(lassoFit)
+```
+
+```{r}
+set.seed(1)
+enetFit <- train(x=X.train,
+                 y=y.train,
+                 method='enet',
+                 metric='Rsquared',
+                 tuneGrid=expand.grid(.fraction = seq(0, 1, by=0.1), 
+                                      .lambda = seq(0, 1, by=0.1)),
+                 trControl=trainControl(method='cv'),
+                 preProcess=c('center','scale')
+                  )
+enetFit
+```
+
+```{r}
+plot(enetFit)
+```
+
+
+(f) Would you recommend any of your models to replace the permeability laboratory experiment? 
+
+I would not recommend any of my models to replace the permeability laboratory experiment. The graph below of the target variable permeability shows that a majority of my results are under 5.
+
+```{r}
+hist(permeability)
+```
+
+6.3. A chemical manufacturing process for a pharmaceutical product was  discussed in Sect. 1.4. In this problem, the objective is to understand the relationship between biological measurements of the raw materials (predictors), measurements of the manufacturing process (predictors), and the response of  product yield. Biological predictors cannot be changed but can be used to  assess the quality of the raw material before processing. On the other hand,  manufacturing process predictors can be changed in the manufacturing process. Improving product yield by 1% will boost revenue by approximately  one hundred thousand dollars per batch:  
+
+(a) Start R and use these commands to load the data:  > library(AppliedPredictiveModeling)  > data(chemicalManufacturingProcess)  The matrix processPredictors contains the 57 predictors (12 describing  the input biological material and 45 describing the process predictors)  for the 176 manufacturing runs. yield contains the percent yield for each  run.  
+
+```{r}
+library(naniar)
+library(elasticnet)
+
+library(AppliedPredictiveModeling)
+data(ChemicalManufacturingProcess)
+```
+
+(b) A small percentage of cells in the predictor set contain missing values. Use  an imputation function to fill in these missing values (e.g., see Sect. 3.8).  
+
+I will use the ‘bagImpute’ method, which impute the missing values through bagged tree model.
+
+```{r}
+vis_miss(ChemicalManufacturingProcess)
+(cmpImpute <- preProcess(ChemicalManufacturingProcess[,-c(1)], method=c('bagImpute')))
+```
+
+(c) Split the data into a training and a test set, pre-process the data, and  tune a model of your choice from this chapter. What is the optimal value  of the performance metric?  
+
+The best parameter combo is fraction = 0.5, lambda = 0.2, with the RMSE = 1.1920333.
+
+```{r}
+cmp <- predict(cmpImpute, ChemicalManufacturingProcess[,-c(1)])
+
+set.seed(17)
+trainRow <- createDataPartition(ChemicalManufacturingProcess$Yield, p=0.8, list=FALSE)
+X.train <- cmp[trainRow, ]
+y.train <- ChemicalManufacturingProcess$Yield[trainRow]
+X.test <- cmp[-trainRow, ]
+y.test <- ChemicalManufacturingProcess$Yield[-trainRow]
+```
+
+```{r}
+set.seed(1)
+enetFit <- train(x=X.train,
+                 y=y.train,
+                 method='enet',
+                 metric='RMSE',
+                 tuneGrid=expand.grid(.fraction = seq(0, 1, by=0.1), 
+                                      .lambda = seq(0, 1, by=0.1)),
+                 trControl=trainControl(method='cv'),
+                 preProcess=c('center','scale')
+                  )
+plot(enetFit)
+```
+
+(d) Predict the response for the test set. What is the value of the performance  metric and how does this compare with the resampled performance metric  on the training set?  
+
+The test set RMSE is 1.0635052. This is lower than the resampled performance metric (cross validated RMSE) on the training set. So the test set result appears to be better than the training set result.
+
+```{r}
+enetPred <- predict(enetFit, newdata=X.test)
+(predResult <- postResample(pred=enetPred, obs=y.test))
+```
+
+(e) Which predictors are most important in the model you have trained? Do either the biological or process predictors dominate the list?  
+
+It appears that ManufacturingProcess are more important. 12 out of the 20 ManufacturingProcess dominate the list.
+
+```{r}
+(coeffs <- predict.enet(enetFit$finalModel, s=enetFit$bestTune[1, "fraction"], type="coef", mode="fraction")$coefficients)
+```
+
+```{r}
+coeffs.sorted <- abs(coeffs)
+coeffs.sorted <- coeffs.sorted[coeffs.sorted>0]
+(coeffs.sorted <- sort(coeffs.sorted, decreasing = T))
+```
+
+```{r}
+varImp(enetFit)
+```
+
+(f) Explore the relationships between each of the top predictors and the response. How could this information be helpful in improving yield in future runs of the manufacturing process? 
+
+Elasticnet is a linear regression model. The coefficients directly explain how the predictors affect the target in this case yields. I would develop coefficients to have the maximum yield return.
+
+```{r}
+coeffs.mp <- coeffs.sorted[grep('ManufacturingProcess', names(coeffs.sorted))] %>% names() %>% coeffs[.]
+coeffs.mp[coeffs.mp>0]
+```
+
+```{r}
+coeffs.mp[coeffs.mp<0]
+```
+

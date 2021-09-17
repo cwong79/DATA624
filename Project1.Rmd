@@ -1,0 +1,336 @@
+---
+title: "Project 1"
+author: "Calvin Wong"
+date: "4/8/2020"
+output: html_document
+---
+
+This project consists of 3 parts - two required and one bonus and is worth 15% of your grade.  The project is due at 11:59 PM on Sunday March 31.  I will accept late submissions with a penalty until the meetup after that when we review some projects.
+
+```{r}
+library(tidyverse)
+library(scales)
+library(readxl)
+library(forecast)
+library(lubridate)
+```
+
+# Part A – ATM Forecast, ATM624Data.xlsx
+
+In part A, I want you to forecast how much cash is taken out of 4 different ATM machines for May 2010.  The data is given in a single file.  The variable ‘Cash’ is provided in hundreds of dollars, other than that it is straight forward.   I am being somewhat ambiguous on purpose to make this have a little more business feeling.  Explain and demonstrate your process, techniques used and not used, and your actual forecast.  I am giving you data via an excel file, please provide your written report on your findings, visuals, discussion and your R code via an RPubs link along with the actual.rmd file Also please submit the forecast which you will put in an Excel readable file.
+
+### Exploratory Phase
+
+In this given time series, the raw data has 3 columns. The 1st column contains the date, 2nd indicates the ATM machine, and the 3rd is the total cash amount drawn in that day. I first separated the data into 4 time series, one for each ATM machine. Below, the time series are plotted along with their corresponding ACF and PACF.
+
+```{r}
+df <- readxl::read_excel('ATM624Data.xlsx') %>%
+      drop_na() %>%
+      spread(ATM, Cash) %>% 
+      mutate(DATE = as.Date(DATE, origin='1899-12-30'))
+  
+  
+atm <- ts(df %>% select(-DATE))
+
+atm %>%
+  summary()
+
+head(atm)
+```
+
+Let us look at data outliers
+
+```{r}
+boxplot(atm)$out
+```
+
+Here is an overview of the data based on ATM,
+
+```{r}
+df %>% gather(atm, Cash, -DATE) %>% 
+  ggplot(aes(x = DATE, y = Cash, col = atm)) +
+  geom_line(show.legend = FALSE) +
+  facet_wrap(~ atm, ncol = 1, scales = "free_y") +
+  labs(title = "Withdrawal by ATM", subtitle = "from 05/09 - 04/10", x = "Date") +
+  scale_y_continuous("Cash withdrawals")
+```
+
+From the plots above, we can make the following observation:
+
+- There are apparent weekly seasonal patterns in ATM 1 and 2.
+- For ATM 3, all of the values are zero except for the last 3 days.
+- For ATM 4, there is one outlier in the data set.
+
+### Data Preparation
+
+```{r}
+atm1 <- atm[, "ATM1"]
+atm2 <- atm[, "ATM2"]
+atm3 <- atm[, "ATM3"]
+atm4 <- atm[, "ATM4"]
+```
+
+Let us use the average week as a baseline to measure activity. 
+
+```{r}
+atm1_ts <- ts(atm1, frequency = 7)
+atm2_ts <- ts(atm2, frequency = 7)
+atm3_ts <- ts(atm3, frequency = 7)
+atm4_ts <- ts(atm4, frequency = 7)
+```
+
+Let us dissect the data by atm and review the activity of each machine
+
+#### ATM 1
+
+The ATM 1 timeseries is displayed below with its ACF & spectrum plots
+
+```{r}
+ggtsdisplay(atm1_ts, points = FALSE, main = "Withdrawals from ATM1", xlab = "Day", ylab = "Cash Amounts")
+```
+
+#### ATM 2
+
+The ATM 2 timeseries is displayed below with its ACF & spectrum plots
+
+```{r}
+ggtsdisplay(atm2_ts, points = FALSE, main = "Withdrawals from ATM2", xlab = "Day", ylab = "Cash Amounts")
+```
+
+#### ATM 3
+
+The ATM 3 timeseries is displayed below with its ACF & spectrum plots
+
+```{r}
+ggtsdisplay(atm3_ts, points = FALSE, main = "Withdrawals from ATM3", xlab = "Day", ylab = "Cash Amounts")
+```
+
+#### ATM 4
+
+The ATM 4 timeseries is displayed below with its ACF & spectrum plots
+
+```{r}
+ggtsdisplay(atm4_ts, points = FALSE, main = "Withdrawals from ATM4", xlab = "Day", ylab = "Cash Amounts")
+```
+
+##ATM 1 & 2
+
+###Using Simple Exponential Smoothing
+
+Simple Exponential Smoothing is a time series forecasting method for univariate data without a trend or seasonality. I do not believe it will be effective with this dataset, however, will attempt just to see how it compares to our other methods of forecasting.
+
+```{r}
+fc_atm1_em <- ses(atm1_ts)
+autoplot(fc_atm1_em) +
+  autolayer(fitted(fc_atm1_em), series="Fitted") +
+  ylab("Cash withdrawals") + xlab("days")
+```
+
+```{r}
+fc_atm2_em <- ses(atm2_ts)
+autoplot(fc_atm2_em) +
+  autolayer(fitted(fc_atm2_em), series="Fitted") +
+  ylab("Cash withdrawals") + xlab("days")
+```
+
+```{r}
+summary(fc_atm1_em)
+summary(fc_atm2_em)
+```
+
+```{r}
+checkresiduals(fc_atm1_em)
+checkresiduals(fc_atm2_em)
+```
+
+We can see the ACF graph and the residuals shows the data is clearly seasonal and the errors are not normally distributed so our predictions might not be accurate. As predicted, this is not effective for our dataset.
+
+###Using ETS 
+
+The ets() function is used to apply exponential smoothing to the time series
+
+```{r}
+fc_atm1_ets <- ets(atm1_ts)
+autoplot(fc_atm1_ets) +
+  autolayer(fitted(fc_atm1_ets), series="Fitted") +
+  ylab("Cash withdrawals") + xlab("days")
+```
+
+```{r}
+fc_atm2_ets <- ets(atm2_ts)
+autoplot(fc_atm2_ets) +
+  autolayer(fitted(fc_atm2_ets), series="Fitted") +
+  ylab("Cash withdrawals") + xlab("days")
+```
+
+
+```{r}
+summary(fc_atm1_ets)
+summary(fc_atm2_ets)
+```
+
+```{r}
+checkresiduals(fc_atm1_ets)
+checkresiduals(fc_atm2_ets)
+```
+
+###Using ARIMA 
+
+The auto.arima() function is used to automatically select an appropriate model
+
+```{r}
+atm1_lambda <- BoxCox.lambda(atm1_ts)
+atm2_lambda <- BoxCox.lambda(atm2_ts)
+fc_arima_atm1 <- auto.arima(atm1_ts)
+fc_arima_atm2 <- auto.arima(atm2_ts)
+summary(fc_arima_atm1)
+summary(fc_arima_atm2)
+```
+
+```{r}
+checkresiduals(fc_arima_atm1)
+checkresiduals(fc_arima_atm2)
+```
+
+##ATM 3
+
+There isn't enough data to forecast, therefore a mean value will be used 
+
+##ATM 4
+
+We follow the same procedures used in ATM 1 and ATM 2
+
+###Using Simple Exponential Smoothing
+
+
+
+```{r}
+fc_atm4_em <- ses(atm4_ts)
+autoplot(fc_atm4_em) +
+  autolayer(fitted(fc_atm4_em), series="Fitted") +
+  ylab("Cash withdrawals") + xlab("days")
+```
+
+```{r}
+summary(fc_atm4_em)
+```
+
+```{r}
+checkresiduals(fc_atm4_em)
+```
+
+###Using ETS 
+
+```{r}
+fc_atm4_ets <- ets(atm4_ts)
+autoplot(fc_atm4_ets) +
+  autolayer(fitted(fc_atm4_ets), series="Fitted") +
+  ylab("Cash withdrawals") + xlab("days")
+```
+
+```{r}
+summary(fc_atm4_ets)
+```
+
+```{r}
+checkresiduals(fc_atm4_ets)
+```
+
+###Using ARIMA 
+
+The auto.arima() function is used to automatically select an appropriate model
+
+```{r}
+atm4_lambda<-BoxCox.lambda(atm4_ts)
+```
+
+```{r}
+fc_arima_atm4 <- auto.arima(atm4_ts)
+summary(fc_arima_atm4)
+```
+
+```{r}
+checkresiduals(fc_arima_atm4)
+```
+
+##Fitting models
+
+```{r}
+atm1_fit<-Arima(atm1_ts, order = c(1, 0, 0), seasonal = c(2, 1, 0), lambda = atm1_lambda)
+atm1_forecast<-forecast(atm1_fit, 31, level = 95)
+atm2_fit<-Arima(atm2_ts, order = c(1, 0, 0), seasonal = c(2, 1, 0), lambda = atm2_lambda)
+atm2_forecast<-forecast(atm2_fit, 31, level = 95)
+atm3_forecast<-meanf(atm3, 31, level = 95)
+atm4_fit<-Arima(atm4_ts, order = c(0, 0, 0), lambda = atm4_lambda)
+atm4_forecast<-forecast(atm4_fit, 31, level = 95)
+```
+
+## Data output
+
+```{r}
+data_frame(DATE = rep(max(df$DATE) + 1:31, 4), ATM = rep(names(df)[-1], each = 31), Cash = c(atm1_forecast$mean, atm2_forecast$mean, atm3_forecast$mean, atm4_forecast$mean)) %>% 
+  write_csv("DATA624_Project1_partA.csv")
+```
+
+
+#Part B – Forecasting Power, ResidentialCustomerForecastLoad-624.xlsx
+
+Part B consists of a simple dataset of residential power usage for January 1998 until December 2013.  Your assignment is to model these data and a monthly forecast for 2014.  The data is given in a single file.  The variable ‘KWH’ is power consumption in Kilowatt hours, the rest is straight forward.    Add this to your existing files above. 
+
+```{r}
+power <- read_excel("ResidentialCustomerForecastLoad-624.xlsx")
+power <- ts(power[, "KWH"], start = c(1998, 1), frequency = 12)
+```
+
+```{r}
+autoplot(power) +
+  labs(title = "Monthly Residential Power Usage", subtitle = "01/98 - 12/13")
+```
+
+```{r}
+power_lambda <- BoxCox.lambda(power)
+power_trans <- BoxCox(power, power_lambda)
+```
+
+```{r}
+ggtsdisplay(diff(power_trans, 12), points = FALSE, main = "Box-Cox transformed residential power usage")
+```
+
+```{r}
+fc_arima_power <- auto.arima(power_trans)
+summary(fc_arima_power)
+```
+
+The residuals of this fit are investigated with a Ljung-Box test and diagnostic plotting
+
+```{r}
+Box.test(resid(fc_arima_power), type = "L", fitdf = 3, lag = 12)
+```
+
+The Ljung-Box test returns a p-value > 0.05, when using lag = 12 due to the high number of parameters in the fit suggests that the residuals may be white noise.
+ 
+##Fitting models
+
+```{r}
+power_fit <- Arima(power, order = c(2, 1, 1), seasonal = c(0, 0, 2), lambda = power_lambda)
+```
+
+```{r}
+ggtsdisplay(resid(power_fit), points = FALSE, plot.type = "histogram", main = "Residuals for ARIMA(2,1,1)(0,0,2) of power consumption", xlab = "Year", ylab = "Residual")
+```
+
+
+```{r}
+power_forecast <- forecast(power_fit, 12, level = 95)
+autoplot(power_forecast) + 
+    labs(title = "Energy Forecast for 2014", x = "Month", y = "kWh") +
+    theme(legend.position = "none")
+```
+
+## Data output
+
+```{r}
+data_frame(`YYYY-MMM` = paste0(2014, "-", month.abb), KWH = power_forecast$mean) %>% 
+  write_csv("DATA624_Project1_partB.csv")
+```
+
